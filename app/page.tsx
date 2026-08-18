@@ -5,6 +5,7 @@ import BrailleOutputStage from "@/components/BrailleOutputStage";
 import EngineeringView from "@/components/EngineeringView";
 import ScanPanel from "@/components/ScanPanel";
 import DemoMode, { simulateDemoOcr } from "@/components/DemoMode";
+import BrailleBoxDevice from "@/components/device/BrailleBoxDevice";
 import ProcessingPipeline, {
   INITIAL_PIPELINE_STATE,
   type PipelineState,
@@ -13,6 +14,8 @@ import OCRResult from "@/components/OCRResult";
 import { EMPTY_PATTERN, paginateText, type BraillePage } from "@/lib/braille";
 import { runOcr, type OcrProgressUpdate } from "@/lib/ocr";
 import { normalizeForBraille, type NormalizeResult } from "@/lib/textProcessor";
+
+type ViewMode = "standard" | "device";
 
 const SAMPLE_TEXT = "THE SUN IS A STAR";
 
@@ -55,6 +58,15 @@ export default function Home() {
   const [presentationMode, setPresentationMode] = useState(false);
   const [engineeringExpanded, setEngineeringExpanded] = useState(false);
 
+  // --- New: Device Simulator view state ---
+  const [viewMode, setViewMode] = useState<ViewMode>("standard");
+  // True once "LOAD DEMO DOCUMENT" has staged the demo text as an available
+  // document without yet running the pipeline — mirrors an uploaded image's
+  // "captured, not yet scanned" state so the physical SCAN button has
+  // something to act on. Cleared as soon as a real file is selected/removed.
+  const [demoDocumentLoaded, setDemoDocumentLoaded] = useState(false);
+  const hasDocument = imageFile !== null || demoDocumentLoaded;
+
   useEffect(() => {
     if (isFirstRender.current) {
       isFirstRender.current = false;
@@ -89,6 +101,7 @@ export default function Home() {
     if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
     setImageFile(file);
     setImagePreviewUrl(URL.createObjectURL(file));
+    setDemoDocumentLoaded(false);
     setPipeline({ ...INITIAL_PIPELINE_STATE, capture: "completed" });
     setPipelineError(null);
     setOcrRawText(null);
@@ -99,10 +112,32 @@ export default function Home() {
     if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
     setImageFile(null);
     setImagePreviewUrl(null);
+    setDemoDocumentLoaded(false);
     setPipeline(INITIAL_PIPELINE_STATE);
     setPipelineError(null);
     setOcrRawText(null);
     setNormalizedInfo(null);
+  }
+
+  /** Stages the Demo Mode text as an available document without running the pipeline yet — see Device Simulator's two-phase LOAD DEMO DOCUMENT → SCAN flow. */
+  function loadDemoDocument() {
+    if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
+    setImageFile(null);
+    setImagePreviewUrl(null);
+    setDemoDocumentLoaded(true);
+    setPipeline({ ...INITIAL_PIPELINE_STATE, capture: "completed" });
+    setPipelineError(null);
+    setOcrRawText(null);
+    setNormalizedInfo(null);
+  }
+
+  /** Device Simulator's physical SCAN button: runs OCR on an uploaded image, or the staged demo document, whichever is available. */
+  function handleDeviceScan() {
+    if (imageFile) {
+      runPipeline("scan");
+    } else if (demoDocumentLoaded) {
+      runPipeline("demo");
+    }
   }
 
   async function runPipeline(source: RunSource) {
@@ -114,6 +149,7 @@ export default function Home() {
 
     setLastRunSource(source);
     hasPipelineRun.current = true;
+    setDemoDocumentLoaded(false);
     setPipelineError(null);
     setOcrProgress(null);
     setIsRunning(true);
@@ -198,113 +234,181 @@ export default function Home() {
           )}
         </div>
 
-        <button
-          type="button"
-          onClick={() =>
-            setPresentationMode((v) => {
-              const next = !v;
-              if (next) setEngineeringExpanded(false);
-              return next;
-            })
-          }
-          className={`shrink-0 rounded border px-3 py-1.5 text-[11px] font-semibold tracking-[0.15em] transition-colors ${
-            presentationMode
-              ? "border-[#39ff8f]/60 bg-[#39ff8f]/10 text-[#39ff8f]"
-              : "border-white/15 text-white/50 hover:border-white/30 hover:text-white/80"
-          }`}
-        >
-          PRESENTATION MODE
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          <div className="flex rounded border border-white/15 p-0.5">
+            <button
+              type="button"
+              onClick={() => setViewMode("standard")}
+              className={`rounded px-3 py-1 text-[11px] font-semibold tracking-[0.1em] transition-colors ${
+                viewMode === "standard"
+                  ? "bg-white/10 text-white"
+                  : "text-white/40 hover:text-white/70"
+              }`}
+            >
+              STANDARD VIEW
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("device")}
+              className={`rounded px-3 py-1 text-[11px] font-semibold tracking-[0.1em] transition-colors ${
+                viewMode === "device"
+                  ? "bg-[#39ff8f]/15 text-[#39ff8f]"
+                  : "text-white/40 hover:text-white/70"
+              }`}
+            >
+              DEVICE SIMULATOR
+            </button>
+          </div>
+
+          <button
+            type="button"
+            onClick={() =>
+              setPresentationMode((v) => {
+                const next = !v;
+                if (next) setEngineeringExpanded(false);
+                return next;
+              })
+            }
+            className={`shrink-0 rounded border px-3 py-1.5 text-[11px] font-semibold tracking-[0.15em] transition-colors ${
+              presentationMode
+                ? "border-[#39ff8f]/60 bg-[#39ff8f]/10 text-[#39ff8f]"
+                : "border-white/15 text-white/50 hover:border-white/30 hover:text-white/80"
+            }`}
+          >
+            PRESENTATION MODE
+          </button>
+        </div>
       </header>
 
       <main className="flex flex-col gap-5">
         <ProcessingPipeline stages={pipeline} ocrProgress={ocrProgress?.progress} />
 
-        <div
-          className={`flex flex-col gap-3 transition-opacity duration-300 ${
-            isReady ? "opacity-60 hover:opacity-100 focus-within:opacity-100" : ""
-          }`}
-        >
-          <div className="grid gap-3 sm:grid-cols-[2fr_1fr]">
-            <ScanPanel
-              imagePreviewUrl={imagePreviewUrl}
-              isRunning={isRunning}
-              ocrProgress={ocrProgress}
-              onFileSelected={handleFileSelected}
-              onRemoveImage={handleRemoveImage}
-              onScan={() => runPipeline("scan")}
+        {viewMode === "standard" ? (
+          <>
+            <div
+              className={`flex flex-col gap-3 transition-opacity duration-300 ${
+                isReady ? "opacity-60 hover:opacity-100 focus-within:opacity-100" : ""
+              }`}
+            >
+              <div className="grid gap-3 sm:grid-cols-[2fr_1fr]">
+                <ScanPanel
+                  imagePreviewUrl={imagePreviewUrl}
+                  isRunning={isRunning}
+                  ocrProgress={ocrProgress}
+                  onFileSelected={handleFileSelected}
+                  onRemoveImage={handleRemoveImage}
+                  onScan={() => runPipeline("scan")}
+                  presentationMode={presentationMode}
+                />
+                <DemoMode
+                  onRun={() => runPipeline("demo")}
+                  disabled={isRunning}
+                  presentationMode={presentationMode}
+                />
+              </div>
+
+              {pipelineError && (
+                <div className="rounded-lg border border-red-500/40 bg-red-500/5 p-4">
+                  <p className="mb-3 text-sm font-medium text-red-400">{pipelineError}</p>
+                  <div className="flex flex-wrap gap-2">
+                    {lastRunSource && (
+                      <button
+                        type="button"
+                        onClick={() => runPipeline(lastRunSource)}
+                        disabled={isRunning}
+                        className="rounded border border-white/15 px-4 py-2 text-sm text-white transition-colors hover:border-[#39ff8f]/50 hover:text-[#39ff8f] disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        RETRY
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={handleRemoveImage}
+                      disabled={isRunning}
+                      className="rounded border border-white/15 px-4 py-2 text-sm text-white transition-colors hover:border-[#39ff8f]/50 hover:text-[#39ff8f] disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      UPLOAD ANOTHER IMAGE
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => runPipeline("demo")}
+                      disabled={isRunning}
+                      className="rounded border border-[#39ff8f]/40 px-4 py-2 text-sm text-[#39ff8f] transition-colors hover:bg-[#39ff8f]/10 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      USE DEMO MODE
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {ocrRawText !== null && (
+                <OCRResult
+                  rawText={ocrRawText}
+                  normalized={normalizedInfo?.normalized ?? ""}
+                  removedChars={normalizedInfo?.removedChars ?? []}
+                />
+              )}
+            </div>
+
+            <BrailleOutputStage
+              chunkText={currentPage.text}
+              labels={labels}
+              patterns={rendered}
+              pageIndex={pageIndex}
+              pageCount={pages.length}
+              onPrevious={() => setPageIndex((i) => Math.max(0, i - 1))}
+              onNext={() => setPageIndex((i) => Math.min(pages.length - 1, i + 1))}
+              disablePrevious={isFirstPage || isRunning}
+              disableNext={isLastPage || isRunning}
+              sourceLabel={sourceLabel}
+              pinStatus={pipeline.pin_actuation}
               presentationMode={presentationMode}
             />
-            <DemoMode
-              onRun={() => runPipeline("demo")}
-              disabled={isRunning}
+
+            <EngineeringView
+              patterns={rendered}
+              expanded={engineeringExpanded}
+              onToggle={() => setEngineeringExpanded((v) => !v)}
+            />
+          </>
+        ) : (
+          <div className="flex flex-col items-center gap-4">
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              <button
+                type="button"
+                onClick={loadDemoDocument}
+                disabled={isRunning}
+                className="rounded border border-[#39ff8f]/40 px-4 py-2 text-sm font-semibold text-[#39ff8f] transition-colors hover:bg-[#39ff8f]/10 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                LOAD DEMO DOCUMENT
+              </button>
+              {!presentationMode && (
+                <p className="max-w-md text-center text-xs text-white/40 sm:text-left">
+                  Upload a document from Standard View, or load the demo document, then press
+                  the device&apos;s physical SCAN button.
+                </p>
+              )}
+            </div>
+
+            <BrailleBoxDevice
               presentationMode={presentationMode}
+              pipeline={pipeline}
+              hasDocument={hasDocument}
+              isRunning={isRunning}
+              chunkText={currentPage.text}
+              labels={labels}
+              patterns={rendered}
+              pageIndex={pageIndex}
+              pageCount={pages.length}
+              onNext={() => setPageIndex((i) => Math.min(pages.length - 1, i + 1))}
+              onPrevious={() => setPageIndex((i) => Math.max(0, i - 1))}
+              onScan={handleDeviceScan}
+              onRequestInput={() => setViewMode("standard")}
+              disableNext={isLastPage || isRunning}
+              disablePrevious={isFirstPage || isRunning}
             />
           </div>
-
-          {pipelineError && (
-            <div className="rounded-lg border border-red-500/40 bg-red-500/5 p-4">
-              <p className="mb-3 text-sm font-medium text-red-400">{pipelineError}</p>
-              <div className="flex flex-wrap gap-2">
-                {lastRunSource && (
-                  <button
-                    type="button"
-                    onClick={() => runPipeline(lastRunSource)}
-                    disabled={isRunning}
-                    className="rounded border border-white/15 px-4 py-2 text-sm text-white transition-colors hover:border-[#39ff8f]/50 hover:text-[#39ff8f] disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    RETRY
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={handleRemoveImage}
-                  disabled={isRunning}
-                  className="rounded border border-white/15 px-4 py-2 text-sm text-white transition-colors hover:border-[#39ff8f]/50 hover:text-[#39ff8f] disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  UPLOAD ANOTHER IMAGE
-                </button>
-                <button
-                  type="button"
-                  onClick={() => runPipeline("demo")}
-                  disabled={isRunning}
-                  className="rounded border border-[#39ff8f]/40 px-4 py-2 text-sm text-[#39ff8f] transition-colors hover:bg-[#39ff8f]/10 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  USE DEMO MODE
-                </button>
-              </div>
-            </div>
-          )}
-
-          {ocrRawText !== null && (
-            <OCRResult
-              rawText={ocrRawText}
-              normalized={normalizedInfo?.normalized ?? ""}
-              removedChars={normalizedInfo?.removedChars ?? []}
-            />
-          )}
-        </div>
-
-        <BrailleOutputStage
-          chunkText={currentPage.text}
-          labels={labels}
-          patterns={rendered}
-          pageIndex={pageIndex}
-          pageCount={pages.length}
-          onPrevious={() => setPageIndex((i) => Math.max(0, i - 1))}
-          onNext={() => setPageIndex((i) => Math.min(pages.length - 1, i + 1))}
-          disablePrevious={isFirstPage || isRunning}
-          disableNext={isLastPage || isRunning}
-          sourceLabel={sourceLabel}
-          pinStatus={pipeline.pin_actuation}
-          presentationMode={presentationMode}
-        />
-
-        <EngineeringView
-          patterns={rendered}
-          expanded={engineeringExpanded}
-          onToggle={() => setEngineeringExpanded((v) => !v)}
-        />
+        )}
       </main>
     </div>
   );

@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Vendored third-party Tesseract runtime assets — not our source code.
+    "public/tesseract/**",
   ]),
 ]);
 

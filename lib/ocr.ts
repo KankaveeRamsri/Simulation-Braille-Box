@@ -2,7 +2,16 @@
  * Browser-based OCR — no React, no UI concerns.
  * Must only ever be invoked from client-side code (e.g. an event handler),
  * never during server rendering: tesseract.js depends on browser/worker APIs.
+ *
+ * All Tesseract runtime assets (worker, WASM core, English traineddata) are
+ * served locally from public/tesseract/ so OCR works fully offline — no CDN
+ * fallback is configured, so a broken local asset surfaces as a real error
+ * instead of silently reaching out to the network.
  */
+
+const TESSERACT_WORKER_PATH = "/tesseract/worker.min.js";
+const TESSERACT_CORE_PATH = "/tesseract/tesseract-core-lstm.wasm.js";
+const TESSERACT_LANG_PATH = "/tesseract/lang";
 
 export interface OcrResult {
   text: string;
@@ -31,6 +40,9 @@ export async function runOcr(
   const Tesseract = await import("tesseract.js");
 
   const { data } = await Tesseract.recognize(imageFile, "eng", {
+    workerPath: TESSERACT_WORKER_PATH,
+    corePath: TESSERACT_CORE_PATH,
+    langPath: TESSERACT_LANG_PATH,
     logger: (m) => {
       if (onProgress && typeof m.progress === "number") {
         onProgress({ status: m.status, progress: m.progress });

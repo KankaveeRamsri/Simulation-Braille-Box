@@ -1,6 +1,8 @@
 "use client";
 
 import { useRef, useState } from "react";
+import CameraCapture from "@/components/camera/CameraCapture";
+import type { CameraController, DocumentSource } from "@/lib/camera";
 import type { OcrProgressUpdate } from "@/lib/ocr";
 
 const ACCEPTED_TYPES = ["image/png", "image/jpeg"];
@@ -10,17 +12,21 @@ interface ScanPanelProps {
   imagePreviewUrl: string | null;
   isRunning: boolean;
   ocrProgress: OcrProgressUpdate | null;
+  documentSource: DocumentSource | null;
+  camera: CameraController;
   onFileSelected: (file: File) => void;
   onRemoveImage: () => void;
   onScan: () => void;
   presentationMode?: boolean;
 }
 
-/** Image upload, preview, and the SCAN DOCUMENT trigger. Visually matches the BrailleBox theme. */
+/** Image upload or live camera capture, preview, and the SCAN DOCUMENT trigger. */
 export default function ScanPanel({
   imagePreviewUrl,
   isRunning,
   ocrProgress,
+  documentSource,
+  camera,
   onFileSelected,
   onRemoveImage,
   onScan,
@@ -28,6 +34,7 @@ export default function ScanPanel({
 }: ScanPanelProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [inputMethod, setInputMethod] = useState<"upload" | "camera">("upload");
 
   function handleFiles(files: FileList | null) {
     const file = files?.[0];
@@ -46,6 +53,11 @@ export default function ScanPanel({
     onFileSelected(file);
   }
 
+  function selectUploadMethod() {
+    setInputMethod("upload");
+    camera.onStop();
+  }
+
   const scanLabel = isRunning
     ? ocrProgress
       ? `SCANNING… ${Math.round(ocrProgress.progress * 100)}%`
@@ -58,7 +70,34 @@ export default function ScanPanel({
         SCAN DOCUMENT
       </h2>
 
-      {!imagePreviewUrl ? (
+      {!imagePreviewUrl && (
+        <div className="mb-2 flex rounded border border-white/15 p-0.5 text-[11px]">
+          <button
+            type="button"
+            onClick={selectUploadMethod}
+            className={`flex-1 rounded px-2 py-1 font-semibold tracking-[0.05em] transition-colors ${
+              inputMethod === "upload" ? "bg-white/10 text-white" : "text-white/40 hover:text-white/70"
+            }`}
+          >
+            Upload Image
+          </button>
+          <button
+            type="button"
+            onClick={() => setInputMethod("camera")}
+            className={`flex-1 rounded px-2 py-1 font-semibold tracking-[0.05em] transition-colors ${
+              inputMethod === "camera"
+                ? "bg-[#39ff8f]/15 text-[#39ff8f]"
+                : "text-white/40 hover:text-white/70"
+            }`}
+          >
+            Use Camera
+          </button>
+        </div>
+      )}
+
+      {!imagePreviewUrl && inputMethod === "camera" ? (
+        <CameraCapture camera={camera} onFallbackToUpload={selectUploadMethod} />
+      ) : !imagePreviewUrl ? (
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
@@ -75,10 +114,10 @@ export default function ScanPanel({
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={imagePreviewUrl}
-            alt="Uploaded document preview"
+            alt="Document preview"
             className="h-16 w-16 shrink-0 rounded-md border border-white/10 object-cover"
           />
-          <div className="flex flex-1 flex-wrap gap-2">
+          <div className="flex flex-1 flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={onScan}
@@ -87,14 +126,25 @@ export default function ScanPanel({
             >
               {scanLabel}
             </button>
-            <button
-              type="button"
-              onClick={() => inputRef.current?.click()}
-              disabled={isRunning}
-              className="rounded border border-white/15 px-4 py-2 text-sm text-white transition-colors hover:border-[#39ff8f]/50 hover:text-[#39ff8f] disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              Replace
-            </button>
+            {documentSource === "camera" ? (
+              <button
+                type="button"
+                onClick={camera.onRetake}
+                disabled={isRunning}
+                className="rounded border border-white/15 px-4 py-2 text-sm text-white transition-colors hover:border-[#39ff8f]/50 hover:text-[#39ff8f] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Retake
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => inputRef.current?.click()}
+                disabled={isRunning}
+                className="rounded border border-white/15 px-4 py-2 text-sm text-white transition-colors hover:border-[#39ff8f]/50 hover:text-[#39ff8f] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Replace
+              </button>
+            )}
             <button
               type="button"
               onClick={onRemoveImage}
@@ -103,6 +153,11 @@ export default function ScanPanel({
             >
               Remove
             </button>
+            {!presentationMode && documentSource && (
+              <span className="ml-auto text-[10px] tracking-[0.1em] text-white/30">
+                SOURCE: {documentSource.toUpperCase()}
+              </span>
+            )}
           </div>
         </div>
       )}

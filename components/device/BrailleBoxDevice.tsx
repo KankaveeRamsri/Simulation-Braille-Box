@@ -7,7 +7,8 @@ import DeviceControls, { type DeviceButtonId } from "./DeviceControls";
 import DeviceLEDs from "./DeviceLEDs";
 import DeviceStatus from "./DeviceStatus";
 import { EMPTY_PATTERN, type BraillePattern } from "@/lib/braille";
-import { getCameraStatus, getDeviceStatus, type DevicePowerState } from "@/lib/deviceStatus";
+import type { CameraController, DocumentSource } from "@/lib/camera";
+import { getCameraModuleStatus, getDeviceStatus, type DevicePowerState } from "@/lib/deviceStatus";
 import type { PipelineState } from "@/components/ProcessingPipeline";
 
 interface BrailleBoxDeviceProps {
@@ -20,10 +21,13 @@ interface BrailleBoxDeviceProps {
   patterns: BraillePattern[];
   pageIndex: number;
   pageCount: number;
+  camera: CameraController;
+  documentSource: DocumentSource | null;
+  onUploadFile: (file: File) => void;
+  onLoadDemo: () => void;
   onNext: () => void;
   onPrevious: () => void;
   onScan: () => void;
-  onRequestInput: () => void;
   disableNext: boolean;
   disablePrevious: boolean;
 }
@@ -39,8 +43,8 @@ function isTypingTarget(target: EventTarget | null): boolean {
 /**
  * The interactive Device Simulator — a physical-device-inspired presentation
  * layer around the existing application state. All domain behavior (OCR,
- * translation, pagination, pin animation) is invoked through the props
- * passed down from app/page.tsx; nothing here re-implements it.
+ * translation, pagination, pin animation, camera capture) is invoked through
+ * the props passed down from app/page.tsx; nothing here re-implements it.
  */
 export default function BrailleBoxDevice({
   presentationMode,
@@ -52,26 +56,30 @@ export default function BrailleBoxDevice({
   patterns,
   pageIndex,
   pageCount,
+  camera,
+  documentSource,
+  onUploadFile,
+  onLoadDemo,
   onNext,
   onPrevious,
   onScan,
-  onRequestInput,
   disableNext,
   disablePrevious,
 }: BrailleBoxDeviceProps) {
   const [power, setPower] = useState<DevicePowerState>("off");
   const [mode, setMode] = useState<"NORMAL" | "SILENT">("NORMAL");
   const [pressedButton, setPressedButton] = useState<DeviceButtonId | null>(null);
-  const [showNoDocument, setShowNoDocument] = useState(false);
+  const [showInputChoice, setShowInputChoice] = useState(false);
 
   const bootTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const deviceFileInputRef = useRef<HTMLInputElement>(null);
 
   const powered = power === "ready";
   // Gate visibility at render time (rather than clearing state in an effect)
-  // so the notice disappears the instant a document becomes available,
-  // however that happened (device SCAN retry, or uploading from Standard View).
-  const noDocumentNoticeVisible = showNoDocument && !hasDocument;
+  // so the menu disappears the instant a document becomes available or the
+  // camera panel takes over, however that happened.
+  const inputChoiceVisible = showInputChoice && !hasDocument && camera.status === "idle";
 
   useEffect(() => {
     return () => {
@@ -101,10 +109,10 @@ export default function BrailleBoxDevice({
     if (!powered || isRunning) return;
     flashPressed("scan");
     if (!hasDocument) {
-      setShowNoDocument(true);
+      setShowInputChoice(true);
       return;
     }
-    setShowNoDocument(false);
+    setShowInputChoice(false);
     onScan();
   }
 
@@ -159,7 +167,7 @@ export default function BrailleBoxDevice({
   }, []);
 
   const deviceStatus = getDeviceStatus(power, pipeline, hasDocument);
-  const cameraStatus = getCameraStatus(pipeline, hasDocument);
+  const cameraModuleStatus = getCameraModuleStatus(camera.status, pipeline, hasDocument);
 
   const displayPatterns = powered ? patterns : patterns.map(() => EMPTY_PATTERN);
   const displayLabels = powered ? labels : undefined;
@@ -178,7 +186,7 @@ export default function BrailleBoxDevice({
     >
       {/* Header: camera, brand, LEDs + power */}
       <div className="mb-6 flex items-start justify-between gap-4">
-        <DeviceCamera status={cameraStatus} powered={powered} />
+        <DeviceCamera status={cameraModuleStatus} powered={powered} />
 
         <div className="flex flex-col items-center">
           <div className="flex items-center gap-2">
@@ -235,19 +243,52 @@ export default function BrailleBoxDevice({
         <BrailleDisplay patterns={displayPatterns} labels={displayLabels} />
       </div>
 
-      {noDocumentNoticeVisible && (
-        <div className="mb-4 mt-3 flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-400/30 bg-amber-400/5 px-3 py-2">
-          <p className="font-mono text-[11px] tracking-[0.1em] text-amber-300">
-            NO DOCUMENT — SELECT INPUT
+      {inputChoiceVisible && (
+        <div className="mb-4 mt-3 rounded-md border border-amber-400/30 bg-amber-400/5 px-3 py-3">
+          <p className="mb-2 font-mono text-[11px] tracking-[0.1em] text-amber-300">
+            NO DOCUMENT — CHOOSE INPUT
           </p>
-          <button
-            type="button"
-            onClick={onRequestInput}
-            className="shrink-0 rounded border border-white/15 px-2.5 py-1 text-[10px] text-white/70 transition-colors hover:border-[#39ff8f]/50 hover:text-[#39ff8f]"
-          >
-            Go to Scan / Input
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={camera.onStart}
+              className="rounded border border-white/15 px-2.5 py-1.5 text-[11px] text-white/80 transition-colors hover:border-[#39ff8f]/50 hover:text-[#39ff8f]"
+            >
+              USE CAMERA
+            </button>
+            <button
+              type="button"
+              onClick={() => deviceFileInputRef.current?.click()}
+              className="rounded border border-white/15 px-2.5 py-1.5 text-[11px] text-white/80 transition-colors hover:border-[#39ff8f]/50 hover:text-[#39ff8f]"
+            >
+              UPLOAD IMAGE
+            </button>
+            <button
+              type="button"
+              onClick={onLoadDemo}
+              className="rounded border border-white/15 px-2.5 py-1.5 text-[11px] text-white/80 transition-colors hover:border-[#39ff8f]/50 hover:text-[#39ff8f]"
+            >
+              LOAD DEMO
+            </button>
+          </div>
+          <input
+            ref={deviceFileInputRef}
+            type="file"
+            accept="image/png,image/jpeg"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) onUploadFile(file);
+              e.target.value = "";
+            }}
+          />
         </div>
+      )}
+
+      {!presentationMode && documentSource && hasDocument && (
+        <p className="mb-3 text-center text-[10px] tracking-[0.1em] text-white/25">
+          SOURCE: {documentSource.toUpperCase()}
+        </p>
       )}
 
       {/* Physical controls */}

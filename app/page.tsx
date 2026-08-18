@@ -6,12 +6,24 @@ import EngineeringView from "@/components/EngineeringView";
 import ScanPanel from "@/components/ScanPanel";
 import DemoMode, { simulateDemoOcr } from "@/components/DemoMode";
 import BrailleBoxDevice from "@/components/device/BrailleBoxDevice";
+import CameraCapture from "@/components/camera/CameraCapture";
 import ProcessingPipeline, {
   INITIAL_PIPELINE_STATE,
   type PipelineState,
 } from "@/components/ProcessingPipeline";
 import OCRResult from "@/components/OCRResult";
 import { EMPTY_PATTERN, paginateText, type BraillePage } from "@/lib/braille";
+import {
+  captureFrameToFile,
+  classifyCameraError,
+  isCameraSupported,
+  requestCameraStream,
+  stopMediaStream,
+  type CameraCaptureStatus,
+  type CameraController,
+  type CameraErrorReason,
+  type DocumentSource,
+} from "@/lib/camera";
 import { runOcr, type OcrProgressUpdate } from "@/lib/ocr";
 import { normalizeForBraille, type NormalizeResult } from "@/lib/textProcessor";
 
@@ -43,6 +55,14 @@ export default function Home() {
   // --- New: scan input state ---
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
+  const [documentSource, setDocumentSource] = useState<DocumentSource | null>(null);
+
+  // --- New: webcam capture state (shared by Standard View and Device Simulator) ---
+  const [cameraStatus, setCameraStatus] = useState<CameraCaptureStatus>("idle");
+  const [cameraError, setCameraError] = useState<CameraErrorReason | null>(null);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const cameraStreamRef = useRef<MediaStream | null>(null);
 
   // --- New: pipeline / OCR state ---
   const [pipeline, setPipeline] = useState<PipelineState>(INITIAL_PIPELINE_STATE);
@@ -97,11 +117,34 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function handleFileSelected(file: File) {
+  // Keep a ref mirror of the live stream so the true-unmount cleanup below
+  // can stop it without depending on (and re-registering on) stream changes.
+  useEffect(() => {
+    cameraStreamRef.current = cameraStream;
+  }, [cameraStream]);
+
+  // Never leave the camera running in the background: stop it on every view
+  // switch (Standard View <-> Device Simulator), and on true unmount.
+  useEffect(() => {
+    stopCamera();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewMode]);
+
+  useEffect(() => {
+    return () => stopMediaStream(cameraStreamRef.current);
+  }, []);
+
+  function handleFileSelected(file: File, source: DocumentSource = "upload") {
     if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
     setImageFile(file);
     setImagePreviewUrl(URL.createObjectURL(file));
     setDemoDocumentLoaded(false);
+    setDocumentSource(source);
+    // The camera (if any) is done being active once a document exists —
+    // reset to idle so a later removal can't leave a stale "captured"/"error"
+    // status that would incorrectly re-show the camera panel.
+    setCameraStatus("idle");
+    setCameraError(null);
     setPipeline({ ...INITIAL_PIPELINE_STATE, capture: "completed" });
     setPipelineError(null);
     setOcrRawText(null);
@@ -113,6 +156,9 @@ export default function Home() {
     setImageFile(null);
     setImagePreviewUrl(null);
     setDemoDocumentLoaded(false);
+    setDocumentSource(null);
+    setCameraStatus("idle");
+    setCameraError(null);
     setPipeline(INITIAL_PIPELINE_STATE);
     setPipelineError(null);
     setOcrRawText(null);
@@ -125,13 +171,16 @@ export default function Home() {
     setImageFile(null);
     setImagePreviewUrl(null);
     setDemoDocumentLoaded(true);
+    setDocumentSource("demo");
+    setCameraStatus("idle");
+    setCameraError(null);
     setPipeline({ ...INITIAL_PIPELINE_STATE, capture: "completed" });
     setPipelineError(null);
     setOcrRawText(null);
     setNormalizedInfo(null);
   }
 
-  /** Device Simulator's physical SCAN button: runs OCR on an uploaded image, or the staged demo document, whichever is available. */
+  /** Device Simulator's physical SCAN button: runs OCR on an uploaded/captured image, or the staged demo document, whichever is available. */
   function handleDeviceScan() {
     if (imageFile) {
       runPipeline("scan");
@@ -139,6 +188,61 @@ export default function Home() {
       runPipeline("demo");
     }
   }
+
+  async function startCamera() {
+    if (!isCameraSupported()) {
+      setCameraStatus("error");
+      setCameraError("unsupported");
+      return;
+    }
+    setCameraStatus("requesting");
+    setCameraError(null);
+    try {
+      const stream = await requestCameraStream();
+      setCameraStream(stream);
+      setCameraStatus("live");
+    } catch (err) {
+      setCameraStatus("error");
+      setCameraError(classifyCameraError(err));
+    }
+  }
+
+  function stopCamera() {
+    stopMediaStream(cameraStream);
+    setCameraStream(null);
+    setCameraStatus((s) => (s === "live" || s === "requesting" ? "idle" : s));
+  }
+
+  /** Reads the live video frame into a File and hands it to the exact same document-input path an uploaded file uses — no separate camera OCR path. */
+  async function captureFrame() {
+    if (!videoRef.current || cameraStatus !== "live") return;
+    try {
+      const file = await captureFrameToFile(videoRef.current);
+      stopMediaStream(cameraStream);
+      setCameraStream(null);
+      setCameraStatus("captured");
+      handleFileSelected(file, "camera");
+    } catch {
+      setCameraStatus("error");
+      setCameraError("unknown");
+    }
+  }
+
+  function retakePhoto() {
+    handleRemoveImage();
+    startCamera();
+  }
+
+  const cameraController: CameraController = {
+    status: cameraStatus,
+    error: cameraError,
+    stream: cameraStream,
+    videoRef,
+    onStart: startCamera,
+    onCapture: captureFrame,
+    onRetake: retakePhoto,
+    onStop: stopCamera,
+  };
 
   async function runPipeline(source: RunSource) {
     if (isRunning) return;
@@ -158,6 +262,7 @@ export default function Home() {
       if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
       setImageFile(null);
       setImagePreviewUrl(null);
+      setDocumentSource("demo");
     }
 
     setPipeline({
@@ -193,7 +298,13 @@ export default function Home() {
       }));
 
       setSourceText(normalized.normalized);
-      setSourceLabel(source === "scan" ? "OCR SCAN" : "DEMO MODE");
+      setSourceLabel(
+        source === "demo"
+          ? "DEMO MODE"
+          : documentSource === "camera"
+            ? "CAMERA CAPTURE"
+            : "IMAGE UPLOAD",
+      );
       setPageIndex(0);
       setContentRevision((n) => n + 1);
       setPipeline((p) => ({ ...p, braille_translation: "completed" }));
@@ -295,7 +406,9 @@ export default function Home() {
                   imagePreviewUrl={imagePreviewUrl}
                   isRunning={isRunning}
                   ocrProgress={ocrProgress}
-                  onFileSelected={handleFileSelected}
+                  documentSource={documentSource}
+                  camera={cameraController}
+                  onFileSelected={(file) => handleFileSelected(file, "upload")}
                   onRemoveImage={handleRemoveImage}
                   onScan={() => runPipeline("scan")}
                   presentationMode={presentationMode}
@@ -384,11 +497,17 @@ export default function Home() {
               </button>
               {!presentationMode && (
                 <p className="max-w-md text-center text-xs text-white/40 sm:text-left">
-                  Upload a document from Standard View, or load the demo document, then press
-                  the device&apos;s physical SCAN button.
+                  Press the device&apos;s physical SCAN button to choose an input, or load the
+                  demo document above.
                 </p>
               )}
             </div>
+
+            {cameraStatus !== "idle" && !hasDocument && (
+              <div className="w-full max-w-md">
+                <CameraCapture camera={cameraController} compact />
+              </div>
+            )}
 
             <BrailleBoxDevice
               presentationMode={presentationMode}
@@ -400,10 +519,13 @@ export default function Home() {
               patterns={rendered}
               pageIndex={pageIndex}
               pageCount={pages.length}
+              camera={cameraController}
+              documentSource={documentSource}
+              onUploadFile={(file) => handleFileSelected(file, "upload")}
+              onLoadDemo={loadDemoDocument}
               onNext={() => setPageIndex((i) => Math.min(pages.length - 1, i + 1))}
               onPrevious={() => setPageIndex((i) => Math.max(0, i - 1))}
               onScan={handleDeviceScan}
-              onRequestInput={() => setViewMode("standard")}
               disableNext={isLastPage || isRunning}
               disablePrevious={isFirstPage || isRunning}
             />

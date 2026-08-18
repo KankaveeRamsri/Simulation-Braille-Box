@@ -6,6 +6,7 @@
  */
 
 import type { PipelineState } from "@/components/ProcessingPipeline";
+import type { CameraCaptureStatus } from "@/lib/camera";
 
 export type DevicePowerState = "off" | "booting" | "ready";
 
@@ -39,10 +40,22 @@ export function getDeviceStatus(
   return "READY";
 }
 
-export type CameraStatus = "IDLE" | "DOCUMENT READY" | "SCANNING";
+export type CameraModuleStatus = "IDLE" | "LIVE" | "DOCUMENT READY" | "SCANNING" | "ERROR";
 
-export function getCameraStatus(pipeline: PipelineState, hasDocument: boolean): CameraStatus {
+/**
+ * Maps the real camera hardware state (see lib/camera.ts) plus pipeline/
+ * document state onto the decorative camera module's display status.
+ * The module's small lens never actually renders the video feed — this
+ * only drives its status text and indicator color.
+ */
+export function getCameraModuleStatus(
+  cameraStatus: CameraCaptureStatus,
+  pipeline: PipelineState,
+  hasDocument: boolean,
+): CameraModuleStatus {
+  if (cameraStatus === "error") return "ERROR";
   if (pipeline.ocr === "active") return "SCANNING";
+  if (cameraStatus === "live" || cameraStatus === "requesting") return "LIVE";
   if (hasDocument) return "DOCUMENT READY";
   return "IDLE";
 }

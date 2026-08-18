@@ -13,6 +13,7 @@ interface ScanPanelProps {
   onFileSelected: (file: File) => void;
   onRemoveImage: () => void;
   onScan: () => void;
+  presentationMode?: boolean;
 }
 
 /** Image upload, preview, and the SCAN DOCUMENT trigger. Visually matches the BrailleBox theme. */
@@ -23,6 +24,7 @@ export default function ScanPanel({
   onFileSelected,
   onRemoveImage,
   onScan,
+  presentationMode,
 }: ScanPanelProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [localError, setLocalError] = useState<string | null>(null);
@@ -51,9 +53,9 @@ export default function ScanPanel({
     : "SCAN DOCUMENT";
 
   return (
-    <section className="rounded-lg border border-white/10 bg-[#0a0b0a] p-4">
-      <h2 className="mb-3 text-xs font-semibold tracking-[0.2em] text-[#39ff8f]">
-        SCAN / INPUT
+    <section className="rounded-lg border border-white/10 bg-[#0a0b0a] p-3">
+      <h2 className="mb-2 text-[11px] font-semibold tracking-[0.2em] text-white/60">
+        SCAN DOCUMENT
       </h2>
 
       {!imagePreviewUrl ? (
@@ -61,10 +63,12 @@ export default function ScanPanel({
           type="button"
           onClick={() => inputRef.current?.click()}
           disabled={isRunning}
-          className="flex w-full flex-col items-center justify-center gap-2 rounded-md border border-dashed border-white/20 py-10 text-white/50 transition-colors hover:border-[#39ff8f]/50 hover:text-[#39ff8f] disabled:cursor-not-allowed disabled:opacity-40"
+          className="flex w-full flex-col items-center justify-center gap-1.5 rounded-md border border-dashed border-white/20 py-5 text-white/50 transition-colors hover:border-[#39ff8f]/50 hover:text-[#39ff8f] disabled:cursor-not-allowed disabled:opacity-40"
         >
           <span className="text-sm">Click to upload a document image</span>
-          <span className="text-[11px] text-white/30">PNG or JPG</span>
+          {!presentationMode && (
+            <span className="text-[11px] text-white/30">PNG or JPG</span>
+          )}
         </button>
       ) : (
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -72,7 +76,7 @@ export default function ScanPanel({
           <img
             src={imagePreviewUrl}
             alt="Uploaded document preview"
-            className="h-32 w-32 shrink-0 rounded-md border border-white/10 object-cover"
+            className="h-16 w-16 shrink-0 rounded-md border border-white/10 object-cover"
           />
           <div className="flex flex-1 flex-wrap gap-2">
             <button

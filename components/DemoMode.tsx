@@ -16,19 +16,22 @@ export async function simulateDemoOcr(): Promise<string> {
 interface DemoModeProps {
   onRun: () => void;
   disabled?: boolean;
+  presentationMode?: boolean;
 }
 
-export default function DemoMode({ onRun, disabled }: DemoModeProps) {
+export default function DemoMode({ onRun, disabled, presentationMode }: DemoModeProps) {
   return (
-    <section className="flex flex-col justify-between rounded-lg border border-white/10 bg-[#0a0b0a] p-4">
+    <section className="flex flex-col justify-between rounded-lg border border-white/10 bg-[#0a0b0a] p-3">
       <div>
-        <h2 className="mb-1 text-xs font-semibold tracking-[0.2em] text-[#39ff8f]">
+        <h2 className="mb-1 text-[11px] font-semibold tracking-[0.2em] text-white/60">
           DEMO MODE
         </h2>
-        <p className="text-[11px] leading-relaxed text-white/40">
-          Reliable fallback for live presentation — runs the full pipeline with a
-          predefined example instead of a real scan.
-        </p>
+        {!presentationMode && (
+          <p className="text-[11px] leading-relaxed text-white/40">
+            Reliable fallback for live presentation — runs the full pipeline with a
+            predefined example instead of a real scan.
+          </p>
+        )}
       </div>
       <button
         type="button"

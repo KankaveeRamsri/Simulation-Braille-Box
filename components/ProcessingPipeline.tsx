@@ -28,9 +28,9 @@ const STAGES: { id: PipelineStageId; label: string }[] = [
 function statusClasses(status: PipelineStageStatus): string {
   switch (status) {
     case "completed":
-      return "border-[#39ff8f]/60 bg-[#39ff8f]/10 text-[#39ff8f]";
+      return "border-[#39ff8f]/45 bg-[#39ff8f]/5 text-[#39ff8f]/85";
     case "active":
-      return "border-[#39ff8f] bg-[#39ff8f]/20 text-[#39ff8f] shadow-[0_0_16px_-2px_rgba(57,255,143,0.7)] animate-pulse";
+      return "border-[#39ff8f] bg-[#39ff8f]/20 text-[#39ff8f] shadow-[0_0_18px_-2px_rgba(57,255,143,0.75)] animate-pulse";
     case "error":
       return "border-red-500/70 bg-red-500/10 text-red-400";
     default:
@@ -40,10 +40,12 @@ function statusClasses(status: PipelineStageStatus): string {
 
 interface ProcessingPipelineProps {
   stages: PipelineState;
+  /** Real OCR progress (0-1) shown only under the OCR stage while it's active — never a fake/simulated percentage. */
+  ocrProgress?: number | null;
 }
 
 /** Visualizes CAPTURE → OCR → AI PROCESSING → BRAILLE TRANSLATION → PIN ACTUATION for a live audience. */
-export default function ProcessingPipeline({ stages }: ProcessingPipelineProps) {
+export default function ProcessingPipeline({ stages, ocrProgress }: ProcessingPipelineProps) {
   return (
     <div
       role="group"
@@ -52,14 +54,26 @@ export default function ProcessingPipeline({ stages }: ProcessingPipelineProps) 
     >
       {STAGES.map((stage, i) => {
         const status = stages[stage.id];
+        const showOcrProgress =
+          stage.id === "ocr" && status === "active" && typeof ocrProgress === "number";
         return (
           <div key={stage.id} className="flex items-center gap-2">
             <div
-              className={`rounded-md border px-3 py-2 text-center text-[11px] font-semibold tracking-[0.12em] transition-colors duration-200 sm:text-xs ${statusClasses(status)}`}
+              className={`min-w-[8rem] rounded-md border px-3.5 py-2.5 text-center text-xs font-semibold tracking-[0.12em] transition-colors duration-200 sm:text-[13px] ${statusClasses(status)}`}
             >
-              {stage.label}
-              {status === "completed" && <span className="ml-1.5">✓</span>}
-              {status === "error" && <span className="ml-1.5">✕</span>}
+              <div>
+                {stage.label}
+                {status === "completed" && <span className="ml-1.5">✓</span>}
+                {status === "error" && <span className="ml-1.5">✕</span>}
+              </div>
+              {showOcrProgress && (
+                <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-white/10">
+                  <div
+                    className="h-full rounded-full bg-[#39ff8f] transition-all duration-150"
+                    style={{ width: `${Math.round((ocrProgress ?? 0) * 100)}%` }}
+                  />
+                </div>
+              )}
             </div>
             {i < STAGES.length - 1 && (
               <span className="text-white/20" aria-hidden>

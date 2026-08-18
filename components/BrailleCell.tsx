@@ -18,8 +18,8 @@ interface BrailleCellProps {
  */
 export default function BrailleCell({ pattern }: BrailleCellProps) {
   return (
-    <div className="flex h-16 w-10 shrink-0 items-center justify-center rounded-md border border-white/10 bg-[#0d0f0e] shadow-[inset_0_1px_3px_rgba(0,0,0,0.6)]">
-      <div className="grid h-11 w-7 grid-flow-col grid-rows-3 gap-x-1.5 gap-y-1">
+    <div className="flex h-24 w-16 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-[#0d0f0e] shadow-[inset_0_1px_4px_rgba(0,0,0,0.6)]">
+      <div className="grid h-16 w-10 grid-flow-col grid-rows-3 gap-x-2 gap-y-1.5">
         {pattern.map((dotActive, i) => (
           <Pin key={i} active={dotActive} />
         ))}

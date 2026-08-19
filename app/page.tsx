@@ -6,6 +6,7 @@ import EngineeringView from "@/components/EngineeringView";
 import ScanPanel from "@/components/ScanPanel";
 import DemoMode, { simulateDemoOcr } from "@/components/DemoMode";
 import BrailleBoxDevice from "@/components/device/BrailleBoxDevice";
+import HardwareExplorer from "@/components/hardware3d/HardwareExplorer";
 import CameraCapture from "@/components/camera/CameraCapture";
 import ProcessingPipeline, {
   INITIAL_PIPELINE_STATE,
@@ -27,7 +28,7 @@ import {
 import { runOcr, type OcrProgressUpdate } from "@/lib/ocr";
 import { normalizeForBraille, type NormalizeResult } from "@/lib/textProcessor";
 
-type ViewMode = "standard" | "device";
+type ViewMode = "standard" | "device" | "hardware3d";
 
 const SAMPLE_TEXT = "THE SUN IS A STAR";
 
@@ -369,6 +370,17 @@ export default function Home() {
             >
               DEVICE SIMULATOR
             </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("hardware3d")}
+              className={`rounded px-3 py-1 text-[11px] font-semibold tracking-[0.1em] transition-colors ${
+                viewMode === "hardware3d"
+                  ? "bg-[#39ff8f]/15 text-[#39ff8f]"
+                  : "text-white/40 hover:text-white/70"
+              }`}
+            >
+              3D HARDWARE EXPLORER
+            </button>
           </div>
 
           <button
@@ -394,7 +406,9 @@ export default function Home() {
       <main className="flex flex-col gap-5">
         <ProcessingPipeline stages={pipeline} ocrProgress={ocrProgress?.progress} />
 
-        {viewMode === "standard" ? (
+        {viewMode === "hardware3d" ? (
+          <HardwareExplorer presentationMode={presentationMode} patterns={rendered} />
+        ) : viewMode === "standard" ? (
           <>
             <div
               className={`flex flex-col gap-3 transition-opacity duration-300 ${

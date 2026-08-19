@@ -9,6 +9,12 @@ import BrailleBoxDevice from "@/components/device/BrailleBoxDevice";
 import HardwareExplorer from "@/components/hardware3d/HardwareExplorer";
 import ActuatorMechanismExplorer from "@/components/actuator3d/ActuatorMechanismExplorer";
 import CameraCapture from "@/components/camera/CameraCapture";
+import MainNavigation from "@/components/navigation/MainNavigation";
+import GuidedTourNavigator from "@/components/navigation/GuidedTourNavigator";
+import TourInstructionPanel from "@/components/navigation/TourInstructionPanel";
+import ContextualHelp from "@/components/navigation/ContextualHelp";
+import BrailleBoxOverview from "@/components/overview/BrailleBoxOverview";
+import ImpactRoadmap from "@/components/impact/ImpactRoadmap";
 import ProcessingPipeline, {
   INITIAL_PIPELINE_STATE,
   type PipelineState,
@@ -28,8 +34,8 @@ import {
 } from "@/lib/camera";
 import { runOcr, type OcrProgressUpdate } from "@/lib/ocr";
 import { normalizeForBraille, type NormalizeResult } from "@/lib/textProcessor";
-
-type ViewMode = "standard" | "device" | "hardware3d" | "actuator";
+import { GUIDED_TOUR_STEPS } from "@/lib/guidedTour";
+import type { ViewMode } from "@/lib/viewMode";
 
 const SAMPLE_TEXT = "THE SUN IS A STAR";
 
@@ -81,7 +87,10 @@ export default function Home() {
   const [engineeringExpanded, setEngineeringExpanded] = useState(false);
 
   // --- New: Device Simulator view state ---
-  const [viewMode, setViewMode] = useState<ViewMode>("standard");
+  const [viewMode, setViewMode] = useState<ViewMode>("overview");
+  // --- New: navigation / Guided Tour state (Step 8) ---
+  const [tourActive, setTourActive] = useState(false);
+  const [tourStepIndex, setTourStepIndex] = useState(0);
   // True once "LOAD DEMO DOCUMENT" has staged the demo text as an available
   // document without yet running the pipeline — mirrors an uploaded image's
   // "captured, not yet scanned" state so the physical SCAN button has
@@ -320,6 +329,57 @@ export default function Home() {
     }
   }
 
+  // --- New: navigation / Guided Tour handlers (Step 8) ---
+  // These only ever touch viewMode/tourActive/tourStepIndex — none of them
+  // reset document/OCR/Braille state, so switching sections (including via
+  // the tour) never loses a visitor's in-progress scan.
+  function handleNavigate(view: ViewMode) {
+    setViewMode(view);
+  }
+
+  function handleStartTour() {
+    setTourActive(true);
+    setTourStepIndex(0);
+    setViewMode(GUIDED_TOUR_STEPS[0].targetView);
+  }
+
+  function handleExploreFreely() {
+    setTourActive(false);
+    setViewMode("device");
+  }
+
+  function handleExitTour() {
+    setTourActive(false);
+  }
+
+  function goToTourStep(index: number) {
+    const clamped = Math.max(0, Math.min(GUIDED_TOUR_STEPS.length - 1, index));
+    setTourStepIndex(clamped);
+    setViewMode(GUIDED_TOUR_STEPS[clamped].targetView);
+  }
+
+  function handleTourBack() {
+    goToTourStep(tourStepIndex - 1);
+  }
+
+  function handleTourNext() {
+    if (tourStepIndex >= GUIDED_TOUR_STEPS.length - 1) {
+      // FINISH TOUR on the last stage — same as exiting, stays on Impact.
+      setTourActive(false);
+      return;
+    }
+    goToTourStep(tourStepIndex + 1);
+  }
+
+  /** Returns to Overview (or Guided Tour Step 1, if the tour is active) without touching document/OCR/Braille state — clearing that remains the job of the existing Remove/Reset document controls. */
+  function handleStartOver() {
+    if (tourActive) {
+      goToTourStep(0);
+    } else {
+      setViewMode("overview");
+    }
+  }
+
   const isFirstPage = pageIndex === 0;
   const isLastPage = pageIndex === pages.length - 1;
   const isReady = pipeline.braille_translation === "completed" && !isRunning;
@@ -336,64 +396,32 @@ export default function Home() {
             <h1 className="text-2xl font-bold tracking-tight text-white">
               Braille<span className="text-[#39ff8f]">Box</span>
             </h1>
-            {!presentationMode && (
+            {!presentationMode && viewMode !== "overview" && (
               <span className="text-sm text-white/50">Core Braille Simulator</span>
             )}
           </div>
-          {!presentationMode && (
+          {/* Overview's own hero already carries the honesty label and full product description — omit the duplicate here to avoid two differently-worded prototype badges stacked on the same page. */}
+          {!presentationMode && viewMode !== "overview" && (
             <span className="mt-1 inline-block rounded border border-white/15 px-2 py-0.5 text-[10px] font-medium tracking-[0.15em] text-white/40">
               FUNCTIONAL SOFTWARE PROTOTYPE
             </span>
           )}
         </div>
 
-        <div className="flex shrink-0 items-center gap-2">
-          <div className="flex rounded border border-white/15 p-0.5">
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+          {!tourActive && (
+            <MainNavigation active={viewMode} onNavigate={handleNavigate} />
+          )}
+
+          {!presentationMode && (
             <button
               type="button"
-              onClick={() => setViewMode("standard")}
-              className={`rounded px-3 py-1 text-[11px] font-semibold tracking-[0.1em] transition-colors ${
-                viewMode === "standard"
-                  ? "bg-white/10 text-white"
-                  : "text-white/40 hover:text-white/70"
-              }`}
+              onClick={handleStartOver}
+              className="shrink-0 rounded border border-white/10 px-2.5 py-1.5 text-[10px] font-medium tracking-[0.1em] text-white/35 transition-colors hover:border-white/25 hover:text-white/70"
             >
-              STANDARD VIEW
+              START OVER
             </button>
-            <button
-              type="button"
-              onClick={() => setViewMode("device")}
-              className={`rounded px-3 py-1 text-[11px] font-semibold tracking-[0.1em] transition-colors ${
-                viewMode === "device"
-                  ? "bg-[#39ff8f]/15 text-[#39ff8f]"
-                  : "text-white/40 hover:text-white/70"
-              }`}
-            >
-              DEVICE SIMULATOR
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode("hardware3d")}
-              className={`rounded px-3 py-1 text-[11px] font-semibold tracking-[0.1em] transition-colors ${
-                viewMode === "hardware3d"
-                  ? "bg-[#39ff8f]/15 text-[#39ff8f]"
-                  : "text-white/40 hover:text-white/70"
-              }`}
-            >
-              3D HARDWARE EXPLORER
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode("actuator")}
-              className={`rounded px-3 py-1 text-[11px] font-semibold tracking-[0.1em] transition-colors ${
-                viewMode === "actuator"
-                  ? "bg-[#39ff8f]/15 text-[#39ff8f]"
-                  : "text-white/40 hover:text-white/70"
-              }`}
-            >
-              PIN MECHANISM
-            </button>
-          </div>
+          )}
 
           <button
             type="button"
@@ -415,13 +443,80 @@ export default function Home() {
         </div>
       </header>
 
-      <main className="flex flex-col gap-5">
-        <ProcessingPipeline stages={pipeline} ocrProgress={ocrProgress?.progress} />
+      {tourActive && (
+        <GuidedTourNavigator
+          stepIndex={tourStepIndex}
+          onJump={goToTourStep}
+          onBack={handleTourBack}
+          onNext={handleTourNext}
+          onExit={handleExitTour}
+        />
+      )}
 
-        {viewMode === "hardware3d" ? (
-          <HardwareExplorer presentationMode={presentationMode} patterns={rendered} />
+      <main className="flex flex-col gap-5">
+        {viewMode !== "overview" && viewMode !== "impact" && (
+          <ProcessingPipeline stages={pipeline} ocrProgress={ocrProgress?.progress} />
+        )}
+
+        {viewMode === "overview" ? (
+          <>
+            <BrailleBoxOverview
+              onStartTour={handleStartTour}
+              onExploreFreely={handleExploreFreely}
+              tourActive={tourActive}
+            />
+            {tourActive && (
+              <TourInstructionPanel step={GUIDED_TOUR_STEPS[tourStepIndex]} onAdvance={handleTourNext} />
+            )}
+          </>
+        ) : viewMode === "impact" ? (
+          <>
+            <ImpactRoadmap />
+            {tourActive && (
+              <TourInstructionPanel step={GUIDED_TOUR_STEPS[tourStepIndex]} onAdvance={handleTourNext} />
+            )}
+          </>
+        ) : viewMode === "hardware3d" ? (
+          <>
+            {tourActive && (
+              <TourInstructionPanel step={GUIDED_TOUR_STEPS[tourStepIndex]} onAdvance={handleTourNext} />
+            )}
+            <p className="text-center text-[10px] tracking-[0.1em] text-white/30 sm:hidden">
+              BEST EXPERIENCED ON A LARGER SCREEN
+            </p>
+            <HardwareExplorer presentationMode={presentationMode} patterns={rendered} />
+            {!presentationMode && (
+              <ContextualHelp
+                items={[
+                  "Drag — rotate",
+                  "Scroll — zoom",
+                  "EXPLODE — inspect internal layers",
+                  "SHOW DATA FLOW — view system flow",
+                  "Click a component — inspect its details",
+                ]}
+              />
+            )}
+          </>
         ) : viewMode === "actuator" ? (
-          <ActuatorMechanismExplorer presentationMode={presentationMode} />
+          <>
+            {tourActive && (
+              <TourInstructionPanel step={GUIDED_TOUR_STEPS[tourStepIndex]} onAdvance={handleTourNext} />
+            )}
+            <p className="text-center text-[10px] tracking-[0.1em] text-white/30 sm:hidden">
+              BEST EXPERIENCED ON A LARGER SCREEN
+            </p>
+            <ActuatorMechanismExplorer presentationMode={presentationMode} />
+            {!presentationMode && (
+              <ContextualHelp
+                items={[
+                  "AUTO DEMO — run the full mechanism",
+                  "PREVIOUS / NEXT — step through manually",
+                  "CUTAWAY / X-RAY / EXPLODED — inspect the mechanism",
+                  "Click a part — see its role",
+                ]}
+              />
+            )}
+          </>
         ) : viewMode === "standard" ? (
           <>
             <div
@@ -514,6 +609,12 @@ export default function Home() {
           </>
         ) : (
           <div className="flex flex-col items-center gap-4">
+            {tourActive && (
+              <div className="w-full">
+                <TourInstructionPanel step={GUIDED_TOUR_STEPS[tourStepIndex]} onAdvance={handleTourNext} />
+              </div>
+            )}
+
             <div className="flex flex-wrap items-center justify-center gap-3">
               <button
                 type="button"
@@ -557,6 +658,24 @@ export default function Home() {
               disableNext={isLastPage || isRunning}
               disablePrevious={isFirstPage || isRunning}
             />
+
+            <p className="text-center text-[10px] tracking-[0.1em] text-white/30 sm:hidden">
+              BEST EXPERIENCED ON A LARGER SCREEN
+            </p>
+
+            {!presentationMode && (
+              <div className="w-full max-w-md">
+                <ContextualHelp
+                  items={[
+                    "Load a document",
+                    "Capture / upload",
+                    "Press Scan",
+                    "Read the Braille output",
+                    "Use Previous / Next to continue",
+                  ]}
+                />
+              </div>
+            )}
           </div>
         )}
       </main>

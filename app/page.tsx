@@ -7,6 +7,7 @@ import ScanPanel from "@/components/ScanPanel";
 import DemoMode, { simulateDemoOcr } from "@/components/DemoMode";
 import BrailleBoxDevice from "@/components/device/BrailleBoxDevice";
 import HardwareExplorer from "@/components/hardware3d/HardwareExplorer";
+import ActuatorMechanismExplorer from "@/components/actuator3d/ActuatorMechanismExplorer";
 import CameraCapture from "@/components/camera/CameraCapture";
 import ProcessingPipeline, {
   INITIAL_PIPELINE_STATE,
@@ -28,7 +29,7 @@ import {
 import { runOcr, type OcrProgressUpdate } from "@/lib/ocr";
 import { normalizeForBraille, type NormalizeResult } from "@/lib/textProcessor";
 
-type ViewMode = "standard" | "device" | "hardware3d";
+type ViewMode = "standard" | "device" | "hardware3d" | "actuator";
 
 const SAMPLE_TEXT = "THE SUN IS A STAR";
 
@@ -381,6 +382,17 @@ export default function Home() {
             >
               3D HARDWARE EXPLORER
             </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("actuator")}
+              className={`rounded px-3 py-1 text-[11px] font-semibold tracking-[0.1em] transition-colors ${
+                viewMode === "actuator"
+                  ? "bg-[#39ff8f]/15 text-[#39ff8f]"
+                  : "text-white/40 hover:text-white/70"
+              }`}
+            >
+              PIN MECHANISM
+            </button>
           </div>
 
           <button
@@ -408,6 +420,8 @@ export default function Home() {
 
         {viewMode === "hardware3d" ? (
           <HardwareExplorer presentationMode={presentationMode} patterns={rendered} />
+        ) : viewMode === "actuator" ? (
+          <ActuatorMechanismExplorer presentationMode={presentationMode} />
         ) : viewMode === "standard" ? (
           <>
             <div

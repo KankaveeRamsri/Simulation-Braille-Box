@@ -95,9 +95,13 @@ export default function BrailleBoxScene({
       <color attach="background" args={["#050605"]} />
       <fog attach="fog" args={["#050605", 10, 22]} />
 
-      <ambientLight intensity={0.55} />
-      <directionalLight position={[4, 6, 3]} intensity={1.15} />
-      <directionalLight position={[-4, 3, -3]} intensity={0.28} color="#39ff8f" />
+      {/* Soft ambient fill + a strong upper-front key + a neutral rim (opposite side) so dark
+          internal components stay readable, plus a very restrained green accent rim — not
+          strong enough to wash the whole model green. */}
+      <ambientLight intensity={0.42} />
+      <directionalLight position={[3.5, 6.5, 4]} intensity={1.35} />
+      <directionalLight position={[-4.5, 2.5, -4]} intensity={0.55} color="#dce4e0" />
+      <directionalLight position={[0, 2, -3]} intensity={0.12} color="#39ff8f" />
 
       <Suspense fallback={null}>
         <BrailleBoxModel
@@ -113,7 +117,7 @@ export default function BrailleBoxScene({
         {showPowerFlow && <DataFlow exploded={exploded} kind="power" />}
       </Suspense>
 
-      <ContactShadows position={[0, -0.001, 0]} opacity={0.55} scale={9} blur={2.2} far={2.5} color="#000000" />
+      <ContactShadows position={[0, -0.001, 0]} opacity={0.4} scale={9} blur={1.8} far={2.5} color="#000000" />
 
       <CameraRig target={cameraTarget} />
     </Canvas>

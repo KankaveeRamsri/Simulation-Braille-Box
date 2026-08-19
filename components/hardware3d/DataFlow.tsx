@@ -13,7 +13,9 @@ interface DataFlowProps {
 }
 
 const DATA_COLOR = "#39ff8f";
-const POWER_COLOR = "#7fd6ff";
+// Restrained cool cyan/blue — distinct from the green data flow without
+// reading as a bright arcade blue.
+const POWER_COLOR = "#5fa8bf";
 const PARTICLE_COUNT = 3;
 
 /**
@@ -61,9 +63,9 @@ export default function DataFlow({ exploded, kind }: DataFlowProps) {
       <Line
         points={points}
         color={color}
-        lineWidth={1.4}
+        lineWidth={1.5}
         transparent
-        opacity={0.4}
+        opacity={0.55}
         dashed={kind === "power"}
         dashSize={0.14}
         gapSize={0.1}

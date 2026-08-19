@@ -115,13 +115,26 @@ interface HighlightOptions {
   emissiveBase?: number;
 }
 
-/** Shared material styling: selected parts glow green, unrelated parts dim — matches the filter/selection rules in the spec. */
-export function highlightStyle(baseColor: string, { selected, dimmed, emissiveBase = 0.04 }: HighlightOptions) {
+const ACCENT_COLOR = new THREE.Color(ACCENT);
+const _mixColor = new THREE.Color();
+
+/**
+ * Shared material styling. Selection reads as a brighter edge + a modest
+ * green glow layered on top of the part's own material — never a full
+ * swap to solid neon green, which previously made any selected part (and,
+ * during testing, the chassis) look like a flat green shape instead of a
+ * dark component with a highlight. Dimmed (filtered-out / not-selected)
+ * parts stay clearly visible rather than nearly vanishing, so the overall
+ * architecture stays legible while one part is highlighted.
+ */
+export function highlightStyle(baseColor: string, { selected, dimmed, emissiveBase = 0.05 }: HighlightOptions) {
+  _mixColor.set(baseColor);
+  if (selected) _mixColor.lerp(ACCENT_COLOR, 0.2);
   return {
-    color: selected ? ACCENT : baseColor,
+    color: _mixColor.getStyle(),
     emissive: selected ? ACCENT : "#000000",
-    emissiveIntensity: selected ? 0.85 : emissiveBase,
-    opacity: dimmed && !selected ? 0.32 : 1,
+    emissiveIntensity: selected ? 0.5 : emissiveBase,
+    opacity: dimmed && !selected ? 0.5 : 1,
     transparent: dimmed && !selected,
   };
 }

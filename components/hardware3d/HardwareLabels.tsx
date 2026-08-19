@@ -50,8 +50,8 @@ export default function HardwareLabels({ selectedId, onSelect }: HardwareLabelsP
                 onPointerDown={(e) => e.stopPropagation()}
                 className={`pointer-events-auto cursor-pointer select-none whitespace-nowrap rounded border px-2 py-0.5 text-center font-mono text-[10px] tracking-[0.15em] transition-colors ${
                   selected
-                    ? "border-[#39ff8f]/80 bg-[#39ff8f]/15 text-[#39ff8f]"
-                    : "border-[#39ff8f]/30 bg-black/70 text-[#39ff8f]/90 hover:border-[#39ff8f]/60"
+                    ? "border-[#39ff8f]/90 bg-[#39ff8f]/20 text-[#39ff8f]"
+                    : "border-[#39ff8f]/35 bg-black/85 text-[#39ff8f]/90 hover:border-[#39ff8f]/60"
                 }`}
               >
                 {top}
